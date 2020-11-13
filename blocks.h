@@ -8,7 +8,8 @@ static const Block blocks[] = {
 	{" ", "~/.local/bin/statusbar/brightness", 	1, 		23},
 	{"", "~/.local/bin/statusbar/battery",	1, 23},
 	{"", "~/.local/bin/statusbar/nettraf", 		1, 24 },
-	{"", "~/.local/bin/statusbar/internet", 1, 25}
+	{"", "~/.local/bin/statusbar/internet", 1, 25},
+	{"", "~/.local/bin/statusbar/forecast", 43200, 26}
 };
 
 //sets delimeter between status commands. NULL character ('\0') means no delimeter.

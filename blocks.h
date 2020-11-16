@@ -6,7 +6,7 @@ static const Block blocks[] = {
 	{" ", "date '+%a %b %d %I:%M%p'",					5,		0},
 	{"", "~/.local/bin/statusbar/volume", 		5,  		22},
 	{" ", "~/.local/bin/statusbar/brightness", 	1, 		23},
-	{"", "~/.local/bin/statusbar/battery",	1, 23},
+	{"", "~/.local/bin/statusbar/battery",	1, 0},
 	{"", "~/.local/bin/statusbar/nettraf", 		1, 24 },
 	{"", "~/.local/bin/statusbar/internet", 1, 25},
 	{"", "~/.local/bin/statusbar/forecast", 43200, 26}

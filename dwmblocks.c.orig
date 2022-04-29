@@ -175,6 +175,7 @@ void buttonhandler(int sig, siginfo_t *si, void *ucontext)
 	getsigcmds(si->si_value.sival_int >> 8);
 	writestatus();
 }
+
 #endif
 
 void pstdout()

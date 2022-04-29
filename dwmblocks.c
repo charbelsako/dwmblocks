@@ -3,6 +3,7 @@
 #include<string.h>
 #include<unistd.h>
 #include<signal.h>
+#include<sys/wait.h>
 #ifndef NO_X
 #include<X11/Xlib.h>
 #endif
@@ -27,15 +28,15 @@ typedef struct {
 #ifndef __OpenBSD__
 void dummysighandler(int num);
 #endif
-void sighandler(int num);
 void buttonhandler(int sig, siginfo_t *si, void *ucontext);
 void getcmds(int time);
 void getsigcmds(unsigned int signal);
 void setupsignals();
-void sighandler(int signum);
+void sighandler(int signum, siginfo_t *si, void *ucontext);
 int getstatus(char *str, char *last);
 void statusloop();
 void termhandler();
+void chldhandler();
 void pstdout();
 #ifndef NO_X
 void setroot();
@@ -62,8 +63,7 @@ void getcmd(const Block *block, char *output)
 {
 	if (block->signal)
 	{
-		output[0] = block->signal;
-		output++;
+		*output++ = block->signal;
 	}
 	strcpy(output, block->icon);
 	char *cmd = block->command;
@@ -118,18 +118,19 @@ void getsigcmds(unsigned int signal)
 
 void setupsignals()
 {
+	struct sigaction sa = {.sa_sigaction = sighandler, .sa_flags = SA_SIGINFO };
 #ifndef __OpenBSD__
 	    /* initialize all real time signals with dummy handler */
-    for (int i = SIGRTMIN; i <= SIGRTMAX; i++)
+    for (int i = SIGRTMIN; i <= SIGRTMAX; i++){
         signal(i, dummysighandler);
+		sigaddset(&sa.sa_mask, i);
+    }
 #endif
 
-    	struct sigaction sa;
 	for (unsigned int i = 0; i < LENGTH(blocks); i++) {
 		if (blocks[i].signal > 0)
 		{
-			signal(SIGMINUS+blocks[i].signal, sighandler);
-			sigaddset(&sa.sa_mask, SIGRTMIN+blocks[i].signal); // ignore signal when handling SIGUSR1
+			sigaction(SIGMINUS+blocks[i].signal, &sa, NULL);
 		}
 	}
 	
@@ -209,15 +210,42 @@ void dummysighandler(int signum)
 }
 #endif
 
-void sighandler(int signum)
+void sighandler(int signum, siginfo_t *si, void *ucontext)
 {
-	getsigcmds(signum-SIGPLUS);
-	writestatus();
+	if (si->si_value.sival_int) {
+		pid_t parent = getpid();
+		if (fork() == 0) {
+#ifndef NO_X
+			if (dpy)
+				close(ConnectionNumber(dpy));
+#endif
+			int i;
+			for (i = 0; i < LENGTH(blocks) && blocks[i].signal != signum-SIGRTMIN; i++);
+
+			char shcmd[1024];
+			sprintf(shcmd, "%s; kill -%d %d", blocks[i].command, SIGRTMIN+blocks[i].signal, parent);
+			char *cmd[] = { "/bin/sh", "-c", shcmd, NULL };
+			char button[2] = { '0' + si->si_value.sival_int, '\0' };
+			setenv("BUTTON", button, 1);
+			setsid();
+			execvp(cmd[0], cmd);
+			perror(cmd[0]);
+			exit(EXIT_SUCCESS);
+		}
+	} else {
+		getsigcmds(signum-SIGPLUS);
+		writestatus();
+	}
 }
 
 void termhandler()
 {
 	statusContinue = 0;
+}
+
+void chldhandler()
+{
+	while (0 < waitpid(-1, NULL, WNOHANG));
 }
 
 int main(int argc, char** argv)
@@ -236,6 +264,7 @@ int main(int argc, char** argv)
 	delim[delimLen++] = '\0';
 	signal(SIGTERM, termhandler);
 	signal(SIGINT, termhandler);
+	signal(SIGCHLD, chldhandler);
 	statusloop();
 #ifndef NO_X
 	XCloseDisplay(dpy);

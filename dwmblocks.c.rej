@@ -1,64 +1,49 @@
 --- dwmblocks.c
 +++ dwmblocks.c
-@@ -14,6 +14,7 @@ typedef struct {
- 	unsigned int signal;
- } Block;
- void sighandler(int num);
-+void buttonhandler(int sig, siginfo_t *si, void *ucontext);
- void getcmds(int time);
+@@ -28,14 +29,14 @@ typedef struct {
  #ifndef __OpenBSD__
- void getsigcmds(int signal);
-@@ -33,15 +34,32 @@ static int screen;
- static Window root;
- static char statusbar[LENGTH(blocks)][CMDLENGTH] = {0};
- static char statusstr[2][256];
-+static char button[] = "\0";
- static int statusContinue = 1;
- static void (*writestatus) () = setroot;
- 
+ void dummysighandler(int num);
+ #endif
+-void sighandler(int num);
+ void getcmds(int time);
+ void getsigcmds(unsigned int signal);
+ void setupsignals();
+-void sighandler(int signum);
++void sighandler(int signum, siginfo_t *si, void *ucontext);
+ int getstatus(char *str, char *last);
+ void statusloop();
+ void termhandler();
++void chldhandler();
+ void pstdout();
+ #ifndef NO_X
+ void setroot();
+@@ -59,6 +60,8 @@ static int returnStatus = 0;
  //opens process *cmd and stores output in *output
  void getcmd(const Block *block, char *output)
  {
 +	if (block->signal)
-+	{
-+		output[0] = block->signal;
-+		output++;
-+	}
++		*output++ = block->signal;
  	strcpy(output, block->icon);
- 	char *cmd = block->command;
--	FILE *cmdf = popen(cmd,"r");
-+	FILE *cmdf;
-+	if (*button)
-+	{
-+		setenv("BUTTON", button, 1);
-+		cmdf = popen(cmd,"r");
-+		*button = '\0';
-+		unsetenv("BUTTON");
-+	}
-+	else
-+	{
-+		cmdf = popen(cmd,"r");
-+	}
+ 	FILE *cmdf = popen(block->command, "r");
  	if (!cmdf)
- 		return;
- 	char c;
-@@ -79,12 +97,18 @@ void getsigcmds(int signal)
+@@ -103,15 +106,18 @@ void getsigcmds(unsigned int signal)
  
  void setupsignals()
  {
-+	struct sigaction sa;
- 	for(int i = 0; i < LENGTH(blocks); i++)
- 	{	  
- 		if (blocks[i].signal > 0)
-+		{
- 			signal(SIGRTMIN+blocks[i].signal, sighandler);
-+			sigaddset(&sa.sa_mask, SIGRTMIN+blocks[i].signal); // ignore signal when handling SIGUSR1
-+		}
- 	}
--
-+	sa.sa_sigaction = buttonhandler;
-+	sa.sa_flags = SA_SIGINFO;
-+	sigaction(SIGUSR1, &sa, NULL);
- }
++	struct sigaction sa = { .sa_sigaction = sighandler, .sa_flags = SA_SIGINFO };
+ #ifndef __OpenBSD__
+ 	    /* initialize all real time signals with dummy handler */
+-    for (int i = SIGRTMIN; i <= SIGRTMAX; i++)
++    for (int i = SIGRTMIN; i <= SIGRTMAX; i++) {
+         signal(i, dummysighandler);
++		sigaddset(&sa.sa_mask, i);
++	}
  #endif
  
+ 	for (unsigned int i = 0; i < LENGTH(blocks); i++) {
+ 		if (blocks[i].signal > 0)
+-			signal(SIGMINUS+blocks[i].signal, sighandler);
++			sigaction(SIGMINUS+blocks[i].signal, &sa, NULL);
+ 	}
+ 
+ }
